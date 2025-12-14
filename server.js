@@ -4,9 +4,11 @@ import fetch from "node-fetch";
 
 const app = express();
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
+// Environment
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 if (!GROQ_API_KEY) {
@@ -14,22 +16,25 @@ if (!GROQ_API_KEY) {
   process.exit(1);
 }
 
+// Routes
 app.post("/api/generate-cards", async (req, res) => {
   try {
     const { topic, count } = req.body;
 
-    if (!topic) {
-      return res.status(400).json({ error: "Missing topic" });
+    // Validation
+    if (!topic || typeof topic !== "string") {
+      return res.status(400).json({ error: "Missing or invalid topic" });
     }
 
     const cardCount = Math.min(Math.max(Number(count) || 10, 1), 50);
 
+    // Groq API request
     const response = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${GROQ_API_KEY}`,
+          "Authorization": `Bearer ${GROQ_API_KEY}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -39,7 +44,7 @@ app.post("/api/generate-cards", async (req, res) => {
             {
               role: "system",
               content:
-                "You are a flashcard generation engine. Output ONLY valid JSON. No markdown. No explanations."
+                "You generate study flashcards. Output ONLY valid JSON. No markdown. No explanations."
             },
             {
               role: "user",
@@ -85,20 +90,22 @@ Begin.
     }
 
     const text = data?.choices?.[0]?.message?.content;
-    if (!text) throw new Error("No AI output");
+    if (!text) throw new Error("No AI output received");
 
-    const json = JSON.parse(text);
-    if (!Array.isArray(json.cards)) {
-      throw new Error("Invalid JSON structure");
+    const parsed = JSON.parse(text);
+
+    if (!Array.isArray(parsed.cards)) {
+      throw new Error("Invalid JSON structure from AI");
     }
 
-    res.json(json);
-  } catch (err) {
-    console.error("❌ AI error:", err.message);
+    res.json(parsed);
+  } catch (error) {
+    console.error("❌ AI generation error:", error.message);
     res.status(500).json({ error: "AI generation failed" });
   }
 });
 
+// Server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ API running on port ${PORT}`);
