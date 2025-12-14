@@ -1,6 +1,6 @@
-const express = require("express");
-const fetch = require("node-fetch");
-const cors = require("cors");
+import express from "express";
+import fetch from "node-fetch";
+import cors from "cors";
 
 const app = express();
 app.use(cors());
@@ -28,10 +28,7 @@ app.post("/api/generate-cards", async (req, res) => {
           model: "llama-3.1-8b-instant",
           temperature: 0.3,
           messages: [
-            {
-              role: "system",
-              content: "You generate study flashcards."
-            },
+            { role: "system", content: "You generate study flashcards." },
             {
               role: "user",
               content: `
@@ -44,7 +41,7 @@ Output ONLY JSON:
   ]
 }
 
-Make exactly 15 cards.
+Make exactly 10 cards.
               `
             }
           ]
@@ -55,7 +52,7 @@ Make exactly 15 cards.
     const data = await response.json();
     const text = data?.choices?.[0]?.message?.content;
 
-    if (!text) throw new Error("No AI response");
+    if (!text) throw new Error("No AI output");
 
     const json = JSON.parse(text);
     res.json(json);
