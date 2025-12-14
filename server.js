@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import fetch from "node-fetch";
 
 const app = express();
 
@@ -21,7 +22,6 @@ app.post("/api/generate-cards", async (req, res) => {
       return res.status(400).json({ error: "Missing topic" });
     }
 
-    // Safety clamp
     const cardCount = Math.min(Math.max(Number(count) || 10, 1), 50);
 
     const response = await fetch(
@@ -50,7 +50,9 @@ Create study flashcards for the topic:
 
 Number of flashcards to generate: ${cardCount}
 
-Output ONLY valid JSON in this EXACT format:
+Rules:
+- Output ONLY valid JSON
+- Follow this EXACT structure:
 
 {
   "cards": [
@@ -58,17 +60,18 @@ Output ONLY valid JSON in this EXACT format:
   ]
 }
 
-Rules:
+Constraints:
 - Generate EXACTLY ${cardCount} cards
-- Clear questions
-- Short, accurate answers
+- Questions must be clear and concise
+- Answers must be accurate and short
 - No numbering
 - No emojis
 - No markdown
-- No extra text
+- No explanations
+- No extra keys
 
 Begin.
-              `.trim()
+`.trim()
             }
           ]
         })
@@ -76,14 +79,15 @@ Begin.
     );
 
     const data = await response.json();
-    const text = data?.choices?.[0]?.message?.content;
 
-    if (!text) {
-      throw new Error("No AI output received");
+    if (!response.ok) {
+      throw new Error(data?.error?.message || "Groq API error");
     }
 
-    const json = JSON.parse(text);
+    const text = data?.choices?.[0]?.message?.content;
+    if (!text) throw new Error("No AI output");
 
+    const json = JSON.parse(text);
     if (!Array.isArray(json.cards)) {
       throw new Error("Invalid JSON structure");
     }
