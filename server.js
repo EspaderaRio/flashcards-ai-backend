@@ -4,11 +4,11 @@ import fetch from "node-fetch";
 
 const app = express();
 
-// Middleware
+/* ---------------- Middleware ---------------- */
 app.use(cors());
 app.use(express.json());
 
-// Environment
+/* ---------------- Env Check ---------------- */
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 if (!GROQ_API_KEY) {
@@ -16,25 +16,36 @@ if (!GROQ_API_KEY) {
   process.exit(1);
 }
 
-// Routes
+/* ---------------- Health Check ---------------- */
+app.get("/", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    service: "Flashcards AI Backend",
+    message: "Server is running successfully 🚀",
+    endpoints: {
+      generate_cards: "POST /api/generate-cards"
+    }
+  });
+});
+
+/* ---------------- AI Flashcards Endpoint ---------------- */
 app.post("/api/generate-cards", async (req, res) => {
   try {
     const { topic, count } = req.body;
 
-    // Validation
-    if (!topic || typeof topic !== "string") {
-      return res.status(400).json({ error: "Missing or invalid topic" });
+    if (!topic) {
+      return res.status(400).json({ error: "Missing topic" });
     }
 
+    // Clamp card count
     const cardCount = Math.min(Math.max(Number(count) || 10, 1), 50);
 
-    // Groq API request
     const response = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${GROQ_API_KEY}`,
+          Authorization: `Bearer ${GROQ_API_KEY}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -44,7 +55,7 @@ app.post("/api/generate-cards", async (req, res) => {
             {
               role: "system",
               content:
-                "You generate study flashcards. Output ONLY valid JSON. No markdown. No explanations."
+                "You are a flashcard generation engine. Output ONLY valid JSON. No markdown. No explanations."
             },
             {
               role: "user",
@@ -90,22 +101,21 @@ Begin.
     }
 
     const text = data?.choices?.[0]?.message?.content;
-    if (!text) throw new Error("No AI output received");
+    if (!text) throw new Error("No AI output");
 
-    const parsed = JSON.parse(text);
-
-    if (!Array.isArray(parsed.cards)) {
-      throw new Error("Invalid JSON structure from AI");
+    const json = JSON.parse(text);
+    if (!Array.isArray(json.cards)) {
+      throw new Error("Invalid JSON structure");
     }
 
-    res.json(parsed);
-  } catch (error) {
-    console.error("❌ AI generation error:", error.message);
+    res.json(json);
+  } catch (err) {
+    console.error("❌ AI error:", err.message);
     res.status(500).json({ error: "AI generation failed" });
   }
 });
 
-// Server
+/* ---------------- Start Server ---------------- */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ API running on port ${PORT}`);
