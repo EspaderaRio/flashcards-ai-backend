@@ -1,6 +1,5 @@
 import express from "express";
 import cors from "cors";
-import fetch from "node-fetch";
 
 const app = express();
 
@@ -49,7 +48,7 @@ app.post("/api/generate-cards", async (req, res) => {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+          model: "llama3-8b-8192",
           temperature: 0.3,
           messages: [
             {
@@ -103,7 +102,14 @@ Begin.
     const text = data?.choices?.[0]?.message?.content;
     if (!text) throw new Error("No AI output");
 
-    const json = JSON.parse(text);
+    let cleanedText = text.trim();
+    if (cleanedText.startsWith('```json')) {
+      cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanedText.startsWith('```')) {
+      cleanedText = cleanedText.replace(/^```\w*\s*/, '').replace(/\s*```$/, '');
+    }
+
+    const json = JSON.parse(cleanedText);
     if (!Array.isArray(json.cards)) {
       throw new Error("Invalid JSON structure");
     }
