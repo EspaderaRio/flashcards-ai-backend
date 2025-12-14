@@ -1,35 +1,19 @@
-import express from "express";
-import fetch from "node-fetch";
-import cors from "cors";
+const express = require("express");
+const fetch = require("node-fetch");
+const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Allow frontend to call this API
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST"],
-}));
-
+app.use(cors());
 app.use(express.json());
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-if (!GROQ_API_KEY) {
-  console.error("❌ GROQ_API_KEY is missing");
-  process.exit(1);
-}
-
-/**
- * POST /api/generate-cards
- * Body: { topic: string }
- */
 app.post("/api/generate-cards", async (req, res) => {
   try {
     const { topic } = req.body;
 
     if (!topic) {
-      return res.status(400).json({ error: "Topic is required" });
+      return res.status(400).json({ error: "Missing topic" });
     }
 
     const response = await fetch(
@@ -46,20 +30,21 @@ app.post("/api/generate-cards", async (req, res) => {
           messages: [
             {
               role: "system",
-              content:
-                "You generate study flashcards. Output ONLY valid JSON. No explanations."
+              content: "You generate study flashcards."
             },
             {
               role: "user",
               content: `
-Create 10 flashcards for the topic: "${topic}"
+Create flashcards for the topic: "${topic}"
 
-Output ONLY JSON in this exact format:
+Output ONLY JSON:
 {
   "cards": [
     { "question": "...", "answer": "..." }
   ]
 }
+
+Make exactly 15 cards.
               `
             }
           ]
@@ -68,38 +53,19 @@ Output ONLY JSON in this exact format:
     );
 
     const data = await response.json();
+    const text = data?.choices?.[0]?.message?.content;
 
-    if (!data.choices?.[0]?.message?.content) {
-      throw new Error("Invalid Groq response");
-    }
+    if (!text) throw new Error("No AI response");
 
-    // Clean & parse AI output
-    const raw = data.choices[0].message.content.trim();
-
-    let json;
-    try {
-      json = JSON.parse(raw);
-    } catch {
-      console.error("❌ Invalid JSON from AI:", raw);
-      return res.status(500).json({ error: "AI returned invalid JSON" });
-    }
-
-    if (!Array.isArray(json.cards)) {
-      return res.status(500).json({ error: "Invalid card format" });
-    }
-
+    const json = JSON.parse(text);
     res.json(json);
   } catch (err) {
-    console.error("❌ Error:", err);
-    res.status(500).json({ error: "Failed to generate cards" });
+    console.error(err);
+    res.status(500).json({ error: "AI generation failed" });
   }
 });
 
-// Health check (IMPORTANT for Render)
-app.get("/", (req, res) => {
-  res.send("Flashcards AI backend is running");
-});
-
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log("API running on port", PORT);
 });
