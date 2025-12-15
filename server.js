@@ -23,8 +23,8 @@ app.get("/", (_req, res) => {
     service: "Flashcards AI Backend",
     message: "Server is running successfully 🚀",
     endpoints: {
-      generate_cards: "POST /api/generate-cards",
-    },
+      generate_cards: "POST /api/generate-cards"
+    }
   });
 });
 
@@ -37,21 +37,15 @@ app.post("/api/generate-cards", async (req, res) => {
       return res.status(400).json({ error: "Missing or invalid topic" });
     }
 
-    // Clamp card count (1–50)
     const cardCount = Math.min(Math.max(Number(count) || 10, 1), 50);
-
-    // Abort controller for timeout safety
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20_000);
 
     const response = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
-        signal: controller.signal,
         headers: {
           Authorization: `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           model: "llama3-8b-8192",
@@ -60,7 +54,7 @@ app.post("/api/generate-cards", async (req, res) => {
             {
               role: "system",
               content:
-                "You are a flashcard generation engine. Output ONLY valid JSON. No markdown. No explanations.",
+                "You are a flashcard generation engine. Output ONLY valid JSON. No markdown. No explanations."
             },
             {
               role: "user",
@@ -92,25 +86,23 @@ Constraints:
 - No extra keys
 
 Begin.
-`.trim(),
-            },
-          ],
-        }),
+`.trim()
+            }
+          ]
+        })
       }
     );
-
-    clearTimeout(timeout);
 
     const data = await response.json();
 
     if (!response.ok) {
+      console.error("Groq error:", data);
       throw new Error(data?.error?.message || "Groq API error");
     }
 
     const text = data?.choices?.[0]?.message?.content;
     if (!text) throw new Error("No AI output");
 
-    // Clean possible code fences
     let cleanedText = text.trim();
     if (cleanedText.startsWith("```")) {
       cleanedText = cleanedText
@@ -127,15 +119,8 @@ Begin.
     res.json(json);
   } catch (err) {
     console.error("❌ AI error stack:", err);
-
-    const status =
-      err.name === "AbortError" ? 504 : 500;
-
-    res.status(status).json({
-      error:
-        err.name === "AbortError"
-          ? "AI request timed out"
-          : err.message || "AI generation failed",
+    res.status(500).json({
+      error: err.message || "AI generation failed"
     });
   }
 });
