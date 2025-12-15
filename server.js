@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import fetch from "node-fetch";
 
 const app = express();
 
@@ -16,14 +17,14 @@ if (!GROQ_API_KEY) {
 }
 
 /* ---------------- Health Check ---------------- */
-app.get("/", (req, res) => {
+app.get("/", (_req, res) => {
   res.status(200).json({
     status: "ok",
     service: "Flashcards AI Backend",
     message: "Server is running successfully 🚀",
     endpoints: {
-      generate_cards: "POST /api/generate-cards"
-    }
+      generate_cards: "POST /api/generate-cards",
+    },
   });
 });
 
@@ -32,20 +33,25 @@ app.post("/api/generate-cards", async (req, res) => {
   try {
     const { topic, count } = req.body;
 
-    if (!topic) {
-      return res.status(400).json({ error: "Missing topic" });
+    if (!topic || typeof topic !== "string") {
+      return res.status(400).json({ error: "Missing or invalid topic" });
     }
 
-    // Clamp card count
+    // Clamp card count (1–50)
     const cardCount = Math.min(Math.max(Number(count) || 10, 1), 50);
+
+    // Abort controller for timeout safety
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
 
     const response = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
+        signal: controller.signal,
         headers: {
           Authorization: `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           model: "llama3-8b-8192",
@@ -54,7 +60,7 @@ app.post("/api/generate-cards", async (req, res) => {
             {
               role: "system",
               content:
-                "You are a flashcard generation engine. Output ONLY valid JSON. No markdown. No explanations."
+                "You are a flashcard generation engine. Output ONLY valid JSON. No markdown. No explanations.",
             },
             {
               role: "user",
@@ -86,12 +92,14 @@ Constraints:
 - No extra keys
 
 Begin.
-`.trim()
-            }
-          ]
-        })
+`.trim(),
+            },
+          ],
+        }),
       }
     );
+
+    clearTimeout(timeout);
 
     const data = await response.json();
 
@@ -102,22 +110,33 @@ Begin.
     const text = data?.choices?.[0]?.message?.content;
     if (!text) throw new Error("No AI output");
 
+    // Clean possible code fences
     let cleanedText = text.trim();
-    if (cleanedText.startsWith('```json')) {
-      cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (cleanedText.startsWith('```')) {
-      cleanedText = cleanedText.replace(/^```\w*\s*/, '').replace(/\s*```$/, '');
+    if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText
+        .replace(/^```(?:json)?\s*/, "")
+        .replace(/\s*```$/, "");
     }
 
     const json = JSON.parse(cleanedText);
+
     if (!Array.isArray(json.cards)) {
       throw new Error("Invalid JSON structure");
     }
 
     res.json(json);
   } catch (err) {
-    console.error("❌ AI error:", err.message);
-    res.status(500).json({ error: "AI generation failed" });
+    console.error("❌ AI error stack:", err);
+
+    const status =
+      err.name === "AbortError" ? 504 : 500;
+
+    res.status(status).json({
+      error:
+        err.name === "AbortError"
+          ? "AI request timed out"
+          : err.message || "AI generation failed",
+    });
   }
 });
 
