@@ -48,7 +48,7 @@ app.post("/api/generate-cards", async (req, res) => {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "llama3-8b-8192",
+          model: "llama3-70b-8192",
           temperature: 0.3,
           messages: [
             {
