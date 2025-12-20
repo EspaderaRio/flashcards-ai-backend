@@ -20,10 +20,11 @@ if (!GROQ_API_KEY) {
 app.get("/", (_req, res) => {
   res.status(200).json({
     status: "ok",
-    service: "Flashcards AI Backend",
+    service: "Flashcards + AI Quiz Backend",
     message: "Server is running successfully 🚀",
     endpoints: {
-      generate_cards: "POST /api/generate-cards"
+      generate_cards: "POST /api/generate-cards",
+      generate_quiz: "POST /api/generate-quiz"
     }
   });
 });
@@ -84,8 +85,6 @@ Constraints:
 - No markdown
 - No explanations
 - No extra keys
-
-Begin.
 `.trim()
             }
           ]
@@ -100,17 +99,14 @@ Begin.
       throw new Error(data?.error?.message || "Groq API error");
     }
 
-    const text = data?.choices?.[0]?.message?.content;
+    let text = data?.choices?.[0]?.message?.content;
     if (!text) throw new Error("No AI output");
 
-    let cleanedText = text.trim();
-    if (cleanedText.startsWith("```")) {
-      cleanedText = cleanedText
-        .replace(/^```(?:json)?\s*/, "")
-        .replace(/\s*```$/, "");
+    if (text.startsWith("```")) {
+      text = text.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
     }
 
-    const json = JSON.parse(cleanedText);
+    const json = JSON.parse(text);
 
     if (!Array.isArray(json.cards)) {
       throw new Error("Invalid JSON structure");
@@ -119,9 +115,87 @@ Begin.
     res.json(json);
   } catch (err) {
     console.error("❌ AI error stack:", err);
-    res.status(500).json({
-      error: err.message || "AI generation failed"
-    });
+    res.status(500).json({ error: err.message || "AI generation failed" });
+  }
+});
+
+/* ---------------- AI Quiz Endpoint ---------------- */
+app.post("/api/generate-quiz", async (req, res) => {
+  try {
+    const { topic, numQuestions } = req.body;
+
+    if (!topic || typeof topic !== "string") {
+      return res.status(400).json({ error: "Missing or invalid topic" });
+    }
+
+    const questionsCount = Math.min(Math.max(Number(numQuestions) || 5, 1), 20);
+
+    const response = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          temperature: 0.5,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a quiz generation engine. Output ONLY valid JSON. No markdown, no explanations."
+            },
+            {
+              role: "user",
+              content: `
+Create ${questionsCount} multiple-choice questions about "${topic}".
+Each question should have 4 options and specify the correct answer.
+Output JSON exactly like this:
+
+{
+  "questions": [
+    { "question": "...", "options": ["A","B","C","D"], "correct": "B" }
+  ]
+}
+
+Constraints:
+- Questions must be clear and concise
+- Options should be plausible but only one correct
+- No numbering, no emojis, no extra keys
+Begin.
+`.trim()
+            }
+          ]
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Groq quiz error:", data);
+      throw new Error(data?.error?.message || "Groq API error");
+    }
+
+    let text = data?.choices?.[0]?.message?.content;
+    if (!text) throw new Error("No AI output");
+
+    if (text.startsWith("```")) {
+      text = text.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+    }
+
+    const json = JSON.parse(text);
+
+    if (!Array.isArray(json.questions)) {
+      throw new Error("Invalid JSON structure");
+    }
+
+    res.json(json);
+  } catch (err) {
+    console.error("❌ AI quiz error stack:", err);
+    res.status(500).json({ error: err.message || "AI quiz generation failed" });
   }
 });
 
