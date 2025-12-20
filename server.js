@@ -151,12 +151,12 @@ app.post("/api/generate-quiz", async (req, res) => {
               role: "user",
               content: `
 Create ${questionsCount} multiple-choice questions about "${topic}".
-Each question should have 4 options and specify the correct answer.
+Each question should have 4 options and specify the correct answer letter (A, B, C, D).
 Output JSON exactly like this:
 
 {
   "questions": [
-    { "question": "...", "options": ["A","B","C","D"], "correct": "B" }
+    { "question": "...", "options": ["Option1","Option2","Option3","Option4"], "correct": "B" }
   ]
 }
 
@@ -173,11 +173,7 @@ Begin.
     );
 
     const data = await response.json();
-
-    if (!response.ok) {
-      console.error("Groq quiz error:", data);
-      throw new Error(data?.error?.message || "Groq API error");
-    }
+    if (!response.ok) throw new Error(data?.error?.message || "Groq API error");
 
     let text = data?.choices?.[0]?.message?.content;
     if (!text) throw new Error("No AI output");
@@ -187,10 +183,7 @@ Begin.
     }
 
     const json = JSON.parse(text);
-
-    if (!Array.isArray(json.questions)) {
-      throw new Error("Invalid JSON structure");
-    }
+    if (!Array.isArray(json.questions)) throw new Error("Invalid JSON structure");
 
     res.json(json);
   } catch (err) {
@@ -198,6 +191,7 @@ Begin.
     res.status(500).json({ error: err.message || "AI quiz generation failed" });
   }
 });
+
 
 /* ---------------- Start Server ---------------- */
 const PORT = process.env.PORT || 3000;
